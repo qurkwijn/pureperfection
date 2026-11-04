@@ -1,5 +1,5 @@
 // Mock-up: gegevens staan in localStorage. In de echte versie komt hier een cloud-backend (bijv. Supabase).
-const KEY = 'stempelkaart-demo-v2';
+const KEY = 'stempelkaart-demo-v3';
 const OWNER_KEY = 'stempelkaart-eigenaresse'; // testversie: inloggen zonder wachtwoord
 const MY_CARD_KEY = 'stempelkaart-mijn-kaart';
 // Huisstijl-assets van de eigen website (voor de mock-up rechtstreeks gelinkt)
@@ -8,20 +8,20 @@ const BOOKING = 'https://pureperfection.nl/afspraak-maken';
 
 const seed = () => {
   const day = 86400000, now = Date.now();
-  // Vaste id's, zodat demo-links ook op een ander toestel dezelfde kaart openen
-  const mk = (name, phone, stamps, rewards, daysAgo) => ({
-    id: name.split(' ')[0].toLowerCase(),
+  // Vaste, onvoorspelbare id's, zodat demo-links ook op een ander toestel dezelfde kaart openen
+  const mk = (id, name, phone, stamps, rewards, daysAgo) => ({
+    id,
     name, phone, stamps, rewardsOpen: rewards,
     history: Array.from({ length: stamps }, (_, i) => ({ type: 'stamp', at: now - (daysAgo + i * 14) * day })),
   });
   return {
     settings: { salon: 'Pure Perfection', needed: 10, reward: 'Gratis behandeling naar keuze' },
     customers: [
-      mk('Sanne de Vries', '06 12345678', 7, 0, 2),
-      mk('Fatima El Amrani', '06 23456789', 9, 0, 5),
-      mk('Lisa Bakker', '06 34567890', 3, 1, 1),
-      mk('Emma Jansen', '06 45678901', 1, 0, 12),
-      mk('Noor Visser', '06 56789012', 5, 0, 20),
+      mk('k7Qm2xR9vT4pLw8n', 'Sanne de Vries', '06 12345678', 7, 0, 2),
+      mk('Hf3Zt8bN1qXc6sJe', 'Fatima El Amrani', '06 23456789', 9, 0, 5),
+      mk('pW5yD2gK9mVr4uAh', 'Lisa Bakker', '06 34567890', 3, 1, 1),
+      mk('Ce7Ln1Fx6Bj3Tz8q', 'Emma Jansen', '06 45678901', 1, 0, 12),
+      mk('Ru4Ga9Ys2Pd7Mk5w', 'Noor Visser', '06 56789012', 5, 0, 20),
     ],
   };
 };
@@ -43,7 +43,12 @@ const store = {
 const isOwner = () => store.get(OWNER_KEY) === '1';
 const digits = p => String(p).replace(/\D/g, '');
 // 06 12345678 → 31612345678 (formaat voor wa.me)
-const intl = p => { const d = digits(p); return d.startsWith('0') ? '31' + d.slice(1) : d; };
+// Klantlink = sleutel tot de kaart, dus lang en willekeurig (16 tekens)
+const newId = () => {
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), b => abc[b % abc.length]).join('');
+};
+const intl = p =>{ const d = digits(p); return d.startsWith('0') ? '31' + d.slice(1) : d; };
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -85,11 +90,7 @@ function viewLogin() {
       <div class="eyebrow">Voor klanten</div>
       <h2 style="margin:4px 0 12px">Bekijk je stempelkaart</h2>
       ${mine ? `<a class="btn" style="text-align:center;margin-bottom:12px" href="#/kaart/${mine.id}">Verder als ${esc(mine.name.split(' ')[0])}</a>` : ''}
-      <form id="f">
-        <label class="field"><span>Je telefoonnummer</span><input name="phone" type="tel" inputmode="tel" placeholder="06 …" required autocomplete="tel"></label>
-        <button class="btn ${mine ? 'secondary' : ''}">Toon mijn kaart</button>
-      </form>
-      <p class="hint">Demo: probeer <b>06 12345678</b>. In de echte versie krijg je eerst een sms-code.</p>
+      <p class="hint" style="margin-top:0">Open je kaart via de persoonlijke link die je van ${esc(db.settings.salon)} hebt gekregen. Link kwijt? Vraag het bij je volgende afspraak, dan sturen we hem opnieuw.</p>
     </div>
     <div class="card">
       <div class="eyebrow">Voor de salon</div>
@@ -97,13 +98,6 @@ function viewLogin() {
       <p class="hint">Testversie: zonder wachtwoord.</p>
     </div>`;
 
-  $('#f').onsubmit = e => {
-    e.preventDefault();
-    const q = digits(new FormData(e.target).get('phone'));
-    const c = q.length >= 8 && db.customers.find(c => digits(c.phone) === q);
-    if (!c) return toast('Geen kaart gevonden. Vraag het even in de salon.');
-    go(`#/kaart/${c.id}`);
-  };
   $('#owner').onclick = () => { store.set(OWNER_KEY, '1'); go('#/beheer'); };
 }
 
@@ -261,7 +255,7 @@ function viewNew() {
     const f = new FormData(e.target);
     const first = f.get('first') === 'on';
     const c = {
-      id: Math.random().toString(36).slice(2, 10),
+      id: newId(),
       name: f.get('name').trim(), phone: (f.get('phone') || '').trim(),
       stamps: first ? 1 : 0, rewardsOpen: 0,
       history: first ? [{ type: 'stamp', at: Date.now() }] : [],
